@@ -4,92 +4,73 @@ package http
 
 import (
 	// "errors"
-	"crypto/rand"
-	"crypto/tls"
 	"fmt"
+	"io"
 	"net"
-	"time"
 )
 
-type FrameHeader struct {
-	Length uint32
-	Type   string
-	Flags  string
-}
-
 type Server struct {
+	addr    string
+	ln      net.Listener
+	headers Headers
 }
 
-func ListenAndServeTLS(addr string, pem string, key string) error {
-	crt, err := tls.LoadX509KeyPair(pem, key)
-	if err != nil {
-		return err
+func (s *Server) ListenAndServe() error {
+	if "" == s.addr {
+		s.addr = ":http"
 	}
-	tlsConfig := &tls.Config{}
-	tlsConfig.Certificates = []tls.Certificate{crt}
-	tlsConfig.Time = time.Now
-	tlsConfig.Rand = rand.Reader
 
-	listen, err := tls.Listen("tcp", addr, tlsConfig)
+	ln, err := net.Listen("tcp", s.addr)
 	if err != nil {
 		return err
 	}
 
-	defer listen.Close()
-
-	for {
-		conn, err := listen.Accept()
-		if err != nil {
-			return err
-		}
-
-		go handlerConnection(conn)
-	}
+	s.ln = ln.(*net.TCPListener)
+	return s.Serve()
 }
 
-func ListenAndServe(addr string) error {
-	listen, err := net.Listen("tcp", addr)
-	if err != nil {
-		return err
-	}
-
-	defer listen.Close()
+func (s *Server) Serve() error {
+	defer s.ln.Close()
 
 	for {
-		conn, err := listen.Accept()
+		rwc, err := s.ln.Accept()
 		if err != nil {
-			return err
+			continue
+			//return err
 		}
-
-		go handlerConnection(conn)
+		go handlerConnection(rwc)
 	}
 }
 
 func handlerConnection(conn net.Conn) {
-	buffer := make([]byte, 1024)
+	defer conn.Close()
 
+	connReader(conn)
+	response := ""
+	response += "HTTP/1.1 200 OK\r\n"
+	response += fmt.Sprintf("Content-Type: text/html\r\n\r\n")
+	response += "Hello world"
+	conn.Write([]byte(response))
+}
+
+func connReader(conn net.Conn) (buffer []byte) {
+	length, maxSize := 0, 0
 	for {
-		n, err := conn.Read(buffer)
-		if err != nil {
-			fmt.Println("conn>read (fail):", err)
-			return
+		buf := make([]byte, 2048)
+		n, err := conn.Read(buf)
+		if err != nil && err != io.EOF {
+			panic(err)
 		}
 
-		defer conn.Close()
-
-		fmt.Printf("%v\n%s\n", buffer[:n], buffer[:n])
-		fmt.Println(buffer[:9], string(buffer[:9]))
-
-		body := []byte("Hello world")
-		length := len(body)
-
-		response := "HTTP/1.1 200 OK\r\n"
-		response += "Date: Tue, 10 Jul 2020 00:00:00 GMT\r\n"
-		response += fmt.Sprintf("Content-Length: %d\r\n", length)
-		response += fmt.Sprintf("Content-Type: text/html\r\n\r\n")
-		response += fmt.Sprintf("%s", body)
-		fmt.Println("-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=")
-		conn.Write([]byte(response))
-		return
+		buffer = append(buffer, buf[:n]...)
+		length += n
+		if maxSize <= 0 {
+			headers := ReadHeaders(buffer)
+			maxSize = headers.ContentLength
+		}
+		if maxSize > 0 && maxSize-1 < length {
+			return
+		}
 	}
+	return
 }

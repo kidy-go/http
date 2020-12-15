@@ -9,6 +9,7 @@ import (
 
 func TestListen(t *testing.T) {
 	//e := ListenAndServeTLS(":443", "test.pem", "test.key")
-	e := ListenAndServe(":80")
+	s := Server{addr: ":89"}
+	e := s.ListenAndServe()
 	fmt.Println(e)
 }
