@@ -12,23 +12,29 @@ type Headers struct {
 	Host          string
 	Referer       string
 	UserAgent     string
+	Boundary      string
 	Length        int
+	Raw           string
 	Payload       map[string][]string
 }
 
 func ReadHeaders(buffer []byte) Headers {
-	headers := Headers{ContentLength: -1}
+	headers := Headers{ContentLength: -1, Raw: ""}
 
 	if pos := strings.Index(string(buffer), "\r\n\r\n"); pos > -1 {
 		headers.Length = pos
 		headers.ContentLength = pos
 		for _, s := range strings.Split(string(buffer[:pos]), "\r\n") {
-			if ex := strings.Split(s, ":"); len(ex) > 1 {
-				n, v := strings.Trim(ex[0], " "), strings.Trim(ex[1], " ")
+			if sn := strings.Index(s, ":"); sn > -1 {
+				headers.Raw += s + "\r\n"
+				n, v := strings.Trim(s[:sn], " "), strings.Trim(s[sn+1:], " ")
 
 				switch strings.ToLower(n) {
 				case "content-type":
-					headers.ContentType = v
+					if bn := strings.Index(v, "boundary="); bn > -1 {
+						headers.Boundary = v[bn+9:]
+					}
+					headers.ContentType = strings.Split(v, ";")[0]
 				case "content-length":
 					if n, e := strconv.Atoi(v); e == nil {
 						headers.ContentLength = n
@@ -43,9 +49,9 @@ func ReadHeaders(buffer []byte) Headers {
 					headers.UserAgent = v
 				}
 
-				var val []string
-				for _, _v := range strings.Split(v, ";") {
-					val = append(val, strings.Trim(_v, " "))
+				val := []string{}
+				for _, xv := range strings.Split(v, ";") {
+					val = append(val, strings.Trim(xv, " "))
 				}
 				headers.Set(strings.ToLower(n), val)
 			}
@@ -54,7 +60,7 @@ func ReadHeaders(buffer []byte) Headers {
 	return headers
 }
 
-func (h Headers) Set(name string, value []string) {
+func (h *Headers) Set(name string, value []string) {
 	if nil == h.Payload {
 		h.Payload = make(map[string][]string)
 	}
@@ -70,4 +76,8 @@ func (h Headers) Get(name string) ([]string, bool) {
 		return v, true
 	}
 	return nil, false
+}
+
+type FormValue struct {
+	ContentType string
 }
