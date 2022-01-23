@@ -17,16 +17,13 @@ func TestRequest(t *testing.T) {
 	raw, err := ioutil.ReadAll(f)
 	checkErr(err)
 
-	fmt.Println("Read Headers:")
 	headers := ReadHeaders(raw)
-	for name, value := range headers.Payload {
-		fmt.Println(name, "=>", value)
-	}
+	fmt.Println(headers)
 
 	bodyBegin := headers.Length + len("\r\n\r\n")
 	body := string(raw[bodyBegin:])
 
-	if "multipart/form-data" == headers.ContentType {
+	if "multipart/form-data" == headers.ContentType() {
 		fmt.Println("Boundary:", headers.Boundary)
 		for _, fraw := range strings.Split(body, "--"+headers.Boundary) {
 			n := len(fraw)
@@ -45,7 +42,6 @@ func TestRequest(t *testing.T) {
 				f, e := os.OpenFile(fname, os.O_WRONLY|os.O_CREATE, 0600)
 				defer f.Close()
 				checkErr(e)
-				fmt.Println([]byte(fraw[rn : len(fraw)-2]))
 				f.Write([]byte(fraw[rn : len(fraw)-2]))
 				break
 			}

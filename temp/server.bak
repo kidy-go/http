@@ -4,6 +4,8 @@ package http
 
 import (
 	// "errors"
+	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -27,6 +29,7 @@ func (s *Server) ListenAndServe() error {
 	if "" == s.addr {
 		s.addr = ":http"
 	}
+	fmt.Println("Listen", s.addr)
 
 	ln, err := net.Listen("tcp", s.addr)
 	if err != nil {
@@ -53,24 +56,21 @@ func (s *Server) Serve() error {
 func handlerConnection(conn net.Conn) {
 	defer conn.Close()
 
-	raw := connReader(conn)
+	//connReader(conn)
+	go serve(conn)
 
-	ioutil.WriteFile("./form-data.raw", raw, 0755)
-	go reader(raw)
-
-	response := ""
-	response += "HTTP/1.1 200 OK\r\n"
-	response += fmt.Sprintf("Content-Type: text/html\r\n\r\n")
-	response += "Hello world"
-	conn.Write([]byte(response))
+	// response(conn)
+	// ioutil.WriteFile("./form-data.raw", raw, 0755)
+	//go reader(raw)
 }
 
 func connReader(conn net.Conn) (buffer []byte) {
 	length, maxSize := 0, 0
 	for {
-		buf := make([]byte, 2048)
+		buf := make([]byte, 1024<<10)
 		n, err := conn.Read(buf)
 		if err != nil && err != io.EOF {
+			//fmt.Println(err)
 			panic(err)
 		}
 
@@ -78,13 +78,33 @@ func connReader(conn net.Conn) (buffer []byte) {
 		length += n
 		if maxSize <= 0 {
 			headers := ReadHeaders(buffer)
-			maxSize = headers.ContentLength
+			maxSize = headers.ContentLength()
 		}
 		if maxSize > 0 && maxSize-1 < length {
 			return
 		}
 	}
 	return
+}
+
+func serve(conn net.Conn) {
+	for {
+		bgRead(conn)
+		simpleResponse(conn)
+	}
+}
+
+func bgRead(cr net.Conn) error {
+	byteBuf := make([]byte, 1)
+	n, err := cr.Read(byteBuf[:])
+	x := 0
+	if n == 1 {
+		x++
+		fmt.Println(x)
+	}
+	if ne, ok := err.(net.Error); ok && ne.Timeout() {
+	}
+	return err
 }
 
 func reader(raw []byte) {
@@ -96,7 +116,7 @@ func reader(raw []byte) {
 	bodyBegin := headers.Length + len("\r\n\r\n")
 	body := string(raw[bodyBegin:])
 
-	if "multipart/form-data" == headers.ContentType {
+	if "multipart/form-data" == headers.ContentType() {
 		fmt.Println("Boundary:", headers.Boundary)
 		for _, fraw := range strings.Split(body, "--"+headers.Boundary) {
 			n := len(fraw)
@@ -123,8 +143,52 @@ func reader(raw []byte) {
 	}
 }
 
+func tGetFile(fname string) []byte {
+	if f, e := os.Open(fname); e == nil {
+		b, _ := ioutil.ReadAll(f)
+		return b
+	}
+	return nil
+}
+
 func _checkErr(e error) {
 	if e != nil {
 		panic(e)
 	}
+}
+
+func response(conn net.Conn) {
+	response := "HTTP/1.1 200 OK\r\n"
+
+	// gzip on
+	body := tGetFile("./img.jpeg")
+	gzipBuf := new(bytes.Buffer)
+	w := gzip.NewWriter(gzipBuf)
+	_, e := w.Write(body)
+
+	_checkErr(e)
+	_checkErr(w.Flush())
+	_checkErr(w.Close())
+	b := gzipBuf.Bytes()
+
+	fmt.Printf("Gzip: %d <> %d \r\n", len(body), len(b))
+
+	response += fmt.Sprintf("Content-Length: %d\r\n", len(b))
+	response += fmt.Sprintf("Content-Type: image/jpeg\r\n")
+	response += fmt.Sprintf("Content-Encoding: gzip\r\n")
+	response += "\r\n" + string(b)
+
+	conn.Write([]byte(response))
+}
+
+func simpleResponse(conn net.Conn) {
+	response := "HTTP/1.1 200 OK\r\n"
+
+	b := "Hello world"
+	response += fmt.Sprintf("Content-Length: %d\r\n", len(b))
+	response += fmt.Sprintf("Content-Type: image/jpeg\r\n")
+	response += fmt.Sprintf("Content-Encoding: gzip\r\n")
+	response += "\r\n" + b
+
+	conn.Write([]byte(response))
 }

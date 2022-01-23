@@ -13,6 +13,7 @@ const (
 	maxFrameSizeUpperBound = 1<<24 - 1
 
 	defaultHeaderTableSize      = 4096
+	DefaultMaxHeaderBytes       = 1 << 20 // 1 MB
 	defaultEnablePush           = 1
 	defaultMaxConcurrentStreams = maxConcurrentStreams
 	defaultInitialWindowSize    = 65535

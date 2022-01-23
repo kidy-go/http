@@ -1,9 +1,0 @@
-x-api-key: admin
-User-Agent: PostmanRuntime/7.26.8
-Accept: */*
-Postman-Token: 54009445-c867-4634-bfd0-aff1ef55c80c
-Host: 112.74.169.173:89
-Accept-Encoding: gzip, deflate, br
-Connection: keep-alive
-Content-Type: multipart/form-data; boundary=--------------------------698607244122138391171835
-Content-Length: 112791
